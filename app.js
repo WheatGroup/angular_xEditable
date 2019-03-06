@@ -1,0 +1,123 @@
+var app = angular.module("app", ["xeditable", "ngMockE2E"]);
+
+app.run(function(editableOptions) {
+  editableOptions.theme = 'bs3';
+});
+
+app.controller('Ctrl', function($scope, $filter, $q, $http) {
+    $scope.count = 0;
+ $scope.users = [
+    {id: 1, name: 'awesome user1', status: 2, group: 4},
+    {id: 2, name: 'awesome user2', status: undefined, group: 3}
+  ]; 
+
+  $scope.statuses = [
+    {value: 1, text: 'status1'},
+    {value: 2, text: 'status2'},
+    {value: 3, text: 'status3'},
+    {value: 4, text: 'status4'}
+  ]; 
+
+  $scope.groups = [];
+  $scope.loadGroups = function() {
+      console.log($scope.groups.length);
+    return $scope.groups.length ? null : $http.get('/groups').success(function(data) {
+      $scope.groups = data;
+    });
+  };
+
+  $scope.showGroup = function(user) {
+    if(user.group && $scope.groups.length) {
+      return user.group;
+    } else {
+      return user.groupName || 'Not set';
+    }
+  };
+
+  $scope.showStatus = function(user) {
+      $scope.count = $scope.count + 1
+      var isStatus = false
+      if(user.status)
+        isStatus = true
+    return isStatus ? user.status : 'Not set';
+  };
+
+  $scope.checkName = function(data, id) {
+    if (id === 2 && data !== 'awesome') {
+      return "Username 2 should be `awesome`";
+    }
+  };
+
+  // filter users to show
+  $scope.filterUser = function(user) {
+    return user.isDeleted !== true;
+  };
+
+  // mark user as deleted
+  $scope.deleteUser = function(id) {
+    var filtered = $filter('filter')($scope.users, {id: id});
+    if (filtered.length) {
+      filtered[0].isDeleted = true;
+    }
+  };
+
+  // add user
+  $scope.addUser = function() {
+    $scope.users.push({
+      id: $scope.users.length+1,
+      name: '',
+      status: null,
+      group: null,
+      isNew: true
+    });
+  };
+
+  // cancel all changes
+  $scope.cancel = function() {
+    for (var i = $scope.users.length; i--;) {
+      var user = $scope.users[i];    
+      // undelete
+      if (user.isDeleted) {
+        delete user.isDeleted;
+      }
+      // remove new 
+      if (user.isNew) {
+        $scope.users.splice(i, 1);
+      }      
+    };
+  };
+
+  // save edits
+  $scope.saveTable = function() {
+    var results = [];
+    for (var i = $scope.users.length; i--;) {
+      var user = $scope.users[i];
+      // actually delete user
+      if (user.isDeleted) {
+        $scope.users.splice(i, 1);
+      }
+      // mark as not new 
+      if (user.isNew) {
+        user.isNew = false;
+      }
+
+      // send on server
+      results.push($http.post('/saveUser', user));      
+    }
+
+    return $q.all(results);
+  };
+});
+
+ //------------ mock $http requests ---------------------
+app.run(function($httpBackend) {
+  $httpBackend.whenGET('/groups').respond([
+    {id: 1, text: 'user'},
+    {id: 2, text: 'customer'}
+  ]);
+
+  $httpBackend.whenPOST(/\/saveUser/).respond(function(method, url, data) {
+    data = angular.fromJson(data);
+    return [200, {status: 'ok'}];
+  });
+});
